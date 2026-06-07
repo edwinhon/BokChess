@@ -634,14 +634,16 @@ function LocalGameContent() {
         {/* End Board wrapper */}
 
         {/* ── Move History — right side ──────────────────── */}
-        {moveNotations.length > 0 && (
-          <div className="flex-shrink-0 w-44">
-            <h3 className="text-stone-400 text-sm mb-1">
-              棋譜
-              {learningMode && <span className="text-amber-400 ml-1">📊</span>}
-            </h3>
-            <div className="bg-stone-800 rounded-lg p-2 max-h-[602px] overflow-y-auto text-sm text-stone-300">
-              {moveNotations.map((item, i) => {
+        <div className="flex-shrink-0 w-44">
+          <h3 className="text-stone-400 text-sm mb-1">
+            棋譜
+            {learningMode && <span className="text-amber-400 ml-1">📊</span>}
+          </h3>
+          <div className="bg-stone-800 rounded-lg p-2 max-h-[602px] overflow-y-auto text-sm text-stone-300">
+            {moveNotations.length === 0 ? (
+              <p className="text-stone-600 text-xs italic">No moves yet</p>
+            ) : (
+              moveNotations.map((item, i) => {
                 const moveNum = i + 1;
                 const roundNum = Math.floor(i / 2) + 1;
                 // In learning mode, show score for AI (Black) moves
@@ -695,10 +697,10 @@ function LocalGameContent() {
                     )}
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
           </div>
-        )}
+        </div>
         {/* End Move History */}
       </div>
       {/* End flex container (Board + EvalBar + MoveHistory) */}
