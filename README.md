@@ -10,7 +10,7 @@ A Chinese Chess (Xiangqi) web application built with Next.js 15, featuring:
 ## Prerequisites
 
 - **Node.js** 18+
-- **Pikafish engine binary** — place the `Pikafish.2026-01-02/` folder in the project root (it should contain `pikafish.nnue` and the platform binaries under `Windows/`, `Linux/`, `MacOS/`)
+- **Pikafish engine** — download from [Pikafish releases](https://github.com/pikafish/pikafish/releases) and place the `Pikafish.2026-01-02/` folder in the project root. It should contain `pikafish.nnue` and the platform binaries under `Windows/`, `Linux/`, `MacOS/`. This folder is gitignored and must be obtained separately.
 
 ## Setup
 

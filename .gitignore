@@ -31,6 +31,9 @@ yarn-error.log*
 # env files
 .env*.local
 
+# Pikafish engine (downloaded separately)
+/Pikafish.2026-01-02/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
