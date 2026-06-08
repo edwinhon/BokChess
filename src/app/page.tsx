@@ -3,13 +3,32 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GameMode, AIDifficulty, AI_DIFFICULTY_CONFIG } from "@/lib/game/types";
+import { usePlayerStore } from "@/hooks/usePlayer";
 
 export default function Home() {
   const router = useRouter();
+  const { player, isLoading, login, logout } = usePlayerStore();
+  const [usernameInput, setUsernameInput] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [selectedMode, setSelectedMode] = useState<GameMode | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<AIDifficulty>(
     AIDifficulty.Medium
   );
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usernameInput.trim()) return;
+    setIsLoggingIn(true);
+    setLoginError("");
+    try {
+      await login(usernameInput.trim());
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleStart = () => {
     if (selectedMode === GameMode.HumanVsHuman) {
@@ -23,8 +42,77 @@ export default function Home() {
     router.push("/game/online");
   };
 
+  // ── Loading state ───────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-stone-950">
+        <p className="text-stone-400 text-lg">Loading...</p>
+      </main>
+    );
+  }
+
+  // ── Login screen (no player yet) ────────────────────────────
+  if (!player) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-stone-950">
+        <h1 className="text-5xl font-bold text-amber-400 mb-2">BokChess</h1>
+        <p className="text-xl text-stone-400 mb-10">Chinese Chess • 象棋</p>
+
+        <form onSubmit={handleLogin} className="flex flex-col gap-4 w-72">
+          <label className="text-stone-300 text-sm font-medium">
+            Enter a username to get started
+          </label>
+          <input
+            type="text"
+            value={usernameInput}
+            onChange={(e) => setUsernameInput(e.target.value)}
+            placeholder="Your username"
+            maxLength={20}
+            minLength={2}
+            className="rounded-xl bg-stone-800 border-2 border-stone-600 px-4 py-3 text-stone-200 placeholder-stone-500 focus:outline-none focus:border-amber-500 transition-colors"
+            autoFocus
+            disabled={isLoggingIn}
+          />
+          {loginError && (
+            <p className="text-red-400 text-sm">{loginError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={isLoggingIn || usernameInput.trim().length < 2}
+            className="rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 px-6 py-3 text-lg font-bold text-white hover:from-amber-500 hover:to-amber-400 transition-all shadow-lg shadow-amber-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoggingIn ? "Signing in..." : "Enter"}
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  // ── Main menu (logged in) ───────────────────────────────────
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-stone-950">
+      {/* Player header */}
+      <div className="absolute top-4 right-4 flex items-center gap-3">
+        <button
+          onClick={() => router.push(`/profile/${player.username}`)}
+          className="text-stone-400 hover:text-amber-400 transition-colors text-sm"
+        >
+          {player.username}
+        </button>
+        <button
+          onClick={() => router.push("/history")}
+          className="text-stone-500 hover:text-stone-300 transition-colors text-sm"
+        >
+          History
+        </button>
+        <button
+          onClick={logout}
+          className="text-stone-600 hover:text-red-400 transition-colors text-xs"
+        >
+          Logout
+        </button>
+      </div>
+
       <h1 className="text-5xl font-bold text-amber-400 mb-2">BokChess</h1>
       <p className="text-xl text-stone-400 mb-10">Chinese Chess • 象棋</p>
 
@@ -112,7 +200,6 @@ export default function Home() {
         >
           <span className="text-xl block mb-1">🌐</span>
           Play Online
-          <span className="block text-xs text-stone-600 mt-1">Coming soon</span>
         </button>
       </div>
     </main>

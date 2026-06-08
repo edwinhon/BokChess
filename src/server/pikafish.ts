@@ -185,6 +185,43 @@ class PikafishEngine {
     return result;
   }
 
+  /**
+   * Analyze a position at a fixed depth and return the evaluation score.
+   * Used for game review to assess each move.
+   */
+  async analyze(
+    board: Board,
+    color: Color,
+    depth: number = 12
+  ): Promise<{ score: number; bestMove: Move | null; depth: number; pv: string[] }> {
+    await this._ensure();
+
+    this._searchId++;
+    const sid = this._searchId;
+
+    this._d("analyze", "=== ANALYZE #" + sid + " depth=" + depth + " color=" + color + " ===");
+
+    await this._cmd("setoption name Hash value 64", null, 150);
+    await this._cmd("setoption name Threads value 1", null, 150);
+
+    const fen = boardToFen(board, color);
+    await this._cmd("position fen " + fen, null, 150);
+
+    const go = "go depth " + depth;
+    const safetyMs = 30000; // 30s timeout
+    const out = await this._cmd(go, "bestmove", 0, safetyMs);
+
+    const result = this._parse(out, board, sid);
+    this._d("analyze", "=== ANALYZE #" + sid + " score=" + result.score + " depth=" + result.depth + " ===");
+
+    return {
+      score: result.score,
+      bestMove: result.move,
+      depth: result.depth,
+      pv: result.pv,
+    };
+  }
+
   async newGame(): Promise<void> {
     if (!this.proc || !this.ready) return;
     await this._cmd("ucinewgame", null, 150);

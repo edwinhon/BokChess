@@ -19,12 +19,16 @@ interface BoardProps {
   onCellClick?: (pos: Position) => void;
   /** MultiPV hint arrows — colored arrows showing top engine suggestions */
   hintArrows?: HintArrow[];
+  /** When true, click-to-move is disabled (review mode) */
+  readonly?: boolean;
+  /** Highlight the from/to squares of the most recent move */
+  lastMove?: { from: Position; to: Position } | null;
 }
 
 const PADDING = 40;
 const CELL_SIZE = 58;
 
-export default function Board({ board, flipped = false, selectedPos, legalMoves = [], onCellClick, hintArrows }: BoardProps) {
+export default function Board({ board, flipped = false, selectedPos, legalMoves = [], onCellClick, hintArrows, readonly = false, lastMove }: BoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const gridToPixel = useCallback(
@@ -295,6 +299,17 @@ export default function Board({ board, flipped = false, selectedPos, legalMoves 
       }
     }
 
+    // ─── Last move highlight (review mode) ──────────────
+    if (lastMove) {
+      for (const pos of [lastMove.from, lastMove.to]) {
+        const { x, y } = gridToPixel(pos.row, pos.col);
+        ctx.fillStyle = "rgba(245, 158, 11, 0.25)";
+        ctx.beginPath();
+        ctx.arc(x, y, CELL_SIZE / 2 - 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // ─── Pieces ──────────────────────────────────────────
     for (let r = 0; r < BOARD_ROWS; r++) {
       for (let c = 0; c < BOARD_COLS; c++) {
@@ -344,10 +359,10 @@ export default function Board({ board, flipped = false, selectedPos, legalMoves 
         ctx.fillText(unicode, x, y + 1);
       }
     }
-  }, [board, flipped, selectedPos, legalMoves, gridToPixel, hintArrows]);
+  }, [board, flipped, selectedPos, legalMoves, gridToPixel, hintArrows, lastMove]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!onCellClick) return;
+    if (!onCellClick || readonly) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -367,7 +382,7 @@ export default function Board({ board, flipped = false, selectedPos, legalMoves 
   return (
     <canvas
       ref={canvasRef}
-      style={{ width, height, cursor: onCellClick ? "pointer" : "default" }}
+      style={{ width, height, cursor: readonly ? "default" : onCellClick ? "pointer" : "default" }}
       onClick={handleClick}
       className="rounded-lg shadow-lg"
     />

@@ -7,25 +7,32 @@ import {
   Move,
   Position,
   GameStatus,
-  GameState,
   oppositeColor,
+  Piece,
 } from "@/lib/game/types";
 import { createInitialBoard, cloneBoard, getPieceAt } from "@/lib/game/board";
 import {
-  generatePieceMoves,
   applyMove,
 } from "@/lib/game/moves";
 import {
   isMoveLegal,
   getAllLegalMoves,
   isInCheck,
-  isCheckmate,
-  isStalemate,
   getGameStatus,
 } from "@/lib/game/rules";
+import { encodeMove } from "@/lib/game/notation";
+
+// ─── Notation record for each move ─────────────────────────────
+interface MoveNotation {
+  moveNumber: number;
+  from: { row: number; col: number };
+  to: { row: number; col: number };
+  captured: { type: string; color: string } | null;
+  notation: string;
+}
 
 interface GameStore {
-  // State
+  // Board state
   board: BoardType;
   currentTurn: Color;
   moveHistory: Move[];
@@ -34,14 +41,28 @@ interface GameStore {
   selectedPos: Position | null;
   legalMoves: Position[];
 
+  // Game metadata
+  playerRedId: string | null;
+  playerBlackId: string | null;
+  mode: string | null; // "human_vs_human" | "human_vs_ai" | "online"
+  aiDifficulty: string | null;
+  isSaved: boolean;
+  savedGameId: string | null;
+
   // Actions
   selectPiece: (pos: Position) => void;
   movePiece: (to: Position) => void;
-  /** Directly apply a pre-validated move from the AI engine, bypassing
-   *  the human select-then-move flow.  Returns true if applied. */
   applyAIMove: (move: Move) => boolean;
   undoMove: () => void;
-  newGame: () => void;
+  /** Initialize a new game with metadata. */
+  initGame: (options: {
+    playerRedId?: string;
+    playerBlackId?: string;
+    mode?: string;
+    aiDifficulty?: string;
+  }) => void;
+  /** Save the current game record to the server. Returns the game ID. */
+  saveGameRecord: () => Promise<string | null>;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -52,6 +73,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isInCheck: false,
   selectedPos: null,
   legalMoves: [],
+  playerRedId: null,
+  playerBlackId: null,
+  mode: null,
+  aiDifficulty: null,
+  isSaved: false,
+  savedGameId: null,
 
   selectPiece: (pos: Position) => {
     const { board, currentTurn, status, selectedPos } = get();
@@ -59,14 +86,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const piece = getPieceAt(board, pos);
 
-    // If a piece is already selected and we click another own piece, switch selection
     if (piece && piece.color === currentTurn) {
-      // If clicking the already-selected piece, deselect
       if (selectedPos && selectedPos.row === pos.row && selectedPos.col === pos.col) {
         set({ selectedPos: null, legalMoves: [] });
         return;
       }
-      // Select new piece, show its legal moves
       const moves = getAllLegalMoves(board, currentTurn)
         .filter((m) => m.from.row === pos.row && m.from.col === pos.col)
         .map((m) => m.to);
@@ -74,7 +98,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
 
-    // If a piece is selected and we click on a legal move target, execute the move
     if (selectedPos) {
       const isLegalTarget = get().legalMoves.some(
         (m) => m.row === pos.row && m.col === pos.col
@@ -85,7 +108,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Clicked on empty/opponent square that's not a legal target — deselect
     set({ selectedPos: null, legalMoves: [] });
   },
 
@@ -118,6 +140,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedPos: null,
       legalMoves: [],
     });
+
+    // Auto-save if game just ended
+    if (newStatus !== GameStatus.Playing && !get().isSaved) {
+      get().saveGameRecord();
+    }
   },
 
   /** Directly apply a pre-validated move from the AI engine. */
@@ -128,8 +155,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return false;
     }
 
-    // Guard: the piece at move.from must belong to currentTurn.
-    // Log a warning if mismatched but still apply — the engine validated it.
     const piece = getPieceAt(board, move.from);
     if (!piece || piece.color !== currentTurn) {
       console.warn(
@@ -138,11 +163,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ") expected=" + currentTurn +
           " found=" + (piece ? piece.color + "/" + piece.type : "empty")
       );
-      // Don't reject — trust the engine.  The mismatch usually means
-      // the board snapshot sent to the engine differs from current store.
     }
 
-    // Apply the move
     const newBoard = cloneBoard(board);
     applyMove(newBoard, move);
 
@@ -160,6 +182,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       legalMoves: [],
     });
 
+    // Auto-save if game just ended
+    if (newStatus !== GameStatus.Playing && !get().isSaved) {
+      get().saveGameRecord();
+    }
+
     return true;
   },
 
@@ -167,8 +194,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { moveHistory } = get();
     if (moveHistory.length === 0) return;
 
-    // For simplicity, reset to initial and replay all moves except the last
-    // A more efficient approach would store board snapshots
     const newBoard = createInitialBoard();
     const moves = moveHistory.slice(0, -1);
 
@@ -187,10 +212,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isInCheck: inCheck,
       selectedPos: null,
       legalMoves: [],
+      isSaved: false,
     });
   },
 
-  newGame: () => {
+  initGame: (options) => {
     set({
       board: createInitialBoard(),
       currentTurn: Color.Red,
@@ -199,6 +225,68 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isInCheck: false,
       selectedPos: null,
       legalMoves: [],
+      playerRedId: options.playerRedId || null,
+      playerBlackId: options.playerBlackId || null,
+      mode: options.mode || null,
+      aiDifficulty: options.aiDifficulty || null,
+      isSaved: false,
+      savedGameId: null,
     });
+  },
+
+  /** Generate notation for all moves and save the game record. */
+  saveGameRecord: async (): Promise<string | null> => {
+    const state = get();
+    if (state.isSaved || state.status === GameStatus.Playing) return null;
+    if (!state.playerRedId || !state.mode) return null;
+
+    // Generate notation by replaying from initial board
+    const replayBoard = createInitialBoard();
+    const notations: MoveNotation[] = [];
+
+    for (let i = 0; i < state.moveHistory.length; i++) {
+      const move = state.moveHistory[i];
+      const piece = getPieceAt(replayBoard, move.from);
+      if (piece) {
+        const notation = encodeMove(move, piece, replayBoard);
+        notations.push({
+          moveNumber: i + 1,
+          from: { row: move.from.row, col: move.from.col },
+          to: { row: move.to.row, col: move.to.col },
+          captured: move.captured
+            ? { type: move.captured.type, color: move.captured.color }
+            : null,
+          notation,
+        });
+      }
+      applyMove(replayBoard, move);
+    }
+
+    try {
+      const res = await fetch("/api/games/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerRedId: state.playerRedId,
+          playerBlackId: state.playerBlackId || undefined,
+          mode: state.mode,
+          aiDifficulty: state.aiDifficulty || undefined,
+          result: state.status,
+          moveHistory: notations,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("[useGame] save failed:", await res.text());
+        return null;
+      }
+
+      const data = await res.json();
+      set({ isSaved: true, savedGameId: data.id });
+      return data.id;
+    } catch (err) {
+      console.error("[useGame] save error:", err);
+      return null;
+    }
   },
 }));

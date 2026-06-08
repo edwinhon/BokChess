@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./bokchess.db"
+}
+
+// ─── Player ────────────────────────────────────────────────────
+model Player {
+  id          String   @id @default(uuid())
+  username    String   @unique
+  displayName String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Stats
+  gamesPlayed Int      @default(0)
+  gamesWon    Int      @default(0)
+  gamesLost   Int      @default(0)
+  gamesDrawn  Int      @default(0)
+
+  // Relations
+  gamesAsRed  GameRecord[] @relation("RedPlayer")
+  gamesAsBlack GameRecord[] @relation("BlackPlayer")
+}
+
+// ─── Game Record (棋譜) ─────────────────────────────────────────
+model GameRecord {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+
+  // Players
+  playerRedId  String
+  playerBlackId String?
+  playerRed    Player   @relation("RedPlayer", fields: [playerRedId], references: [id])
+  playerBlack  Player?  @relation("BlackPlayer", fields: [playerBlackId], references: [id])
+
+  // Game info
+  mode         String   // "human_vs_human" | "human_vs_ai" | "online"
+  aiDifficulty String?  // "easy" | "medium" | "hard" (null if not AI game)
+  result       String   // "red_wins" | "black_wins" | "stalemate"
+  initialFen   String   @default("")
+
+  // Move history stored as JSON string
+  // Array of: { moveNumber, from {row,col}, to {row,col}, captured?, notation, evaluation? }
+  moveHistory  String   @default("[]")
+
+  // Analysis cache
+  isAnalyzed   Boolean  @default(false)
+  analyzedAt   DateTime?
+
+  @@index([playerRedId])
+  @@index([playerBlackId])
+}

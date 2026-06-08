@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState, useMemo, Suspense } from "rea
 import { useSearchParams, useRouter } from "next/navigation";
 import { Color, GameStatus, AIDifficulty, AI_DIFFICULTY_CONFIG } from "@/lib/game/types";
 import { useGameStore } from "@/hooks/useGame";
+import { usePlayerStore } from "@/hooks/usePlayer";
 import { useAI, type AIRequestResult } from "@/hooks/useAI";
 import Board, { HintArrow } from "@/components/board/Board";
 import EvalBar from "@/components/ui/EvalBar";
@@ -32,8 +33,10 @@ function LocalGameContent() {
     legalMoves,
     selectPiece,
     applyAIMove,
-    newGame,
+    initGame,
   } = useGameStore();
+
+  const player = usePlayerStore((s) => s.player);
 
   const { isThinking, lastResult, requestMove, clearCache, isHintLoading, lastHint, requestHint, clearHint } = useAI();
 
@@ -56,11 +59,15 @@ function LocalGameContent() {
   const [hintArrows, setHintArrows] = useState<HintArrow[]>([]);
 
   // ── Reset game on mount ──────────────────────────────────────
-  // Zustand store persists across navigations; ensure a fresh
-  // board whenever the page mounts (e.g. "Start Game" from menu).
   useEffect(() => {
-    useGameStore.getState().newGame();
-  }, []);
+    const p = usePlayerStore.getState().player;
+    useGameStore.getState().initGame({
+      playerRedId: p?.id,
+      playerBlackId: isAIMode ? undefined : undefined, // HumanVsHuman uses same device, both are the same player
+      mode: isAIMode ? "human_vs_ai" : "human_vs_human",
+      aiDifficulty: isAIMode ? difficulty : undefined,
+    });
+  }, [isAIMode, difficulty]);
 
   // ── Win animation state ──────────────────────────────────────
   const [showWinOverlay, setShowWinOverlay] = useState(false);
@@ -280,7 +287,13 @@ function LocalGameContent() {
     clearCache();
     clearHint();
     setHintArrows([]);
-    newGame();
+    const p = usePlayerStore.getState().player;
+    initGame({
+      playerRedId: p?.id,
+      playerBlackId: isAIMode ? undefined : undefined,
+      mode: isAIMode ? "human_vs_ai" : "human_vs_human",
+      aiDifficulty: isAIMode ? difficulty : undefined,
+    });
     // Reset learning mode state
     setCurrentEvalScore(0);
     setLastScoreChange(0);
@@ -288,7 +301,7 @@ function LocalGameContent() {
     setMateDistance(0);
     prevEvalScoreRef.current = 0;
     prevMoveCountRef.current = 0;
-  }, [newGame, clearCache, clearHint]);
+  }, [initGame, isAIMode, difficulty, clearCache, clearHint]);
 
   const handleUndo = useCallback(() => {
     if (moveHistory.length === 0) return;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import PlayerProvider from "@/components/PlayerProvider";
 
 export const metadata: Metadata = {
   title: "BokChess — Chinese Chess (象棋)",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <PlayerProvider>{children}</PlayerProvider>
+      </body>
     </html>
   );
 }
